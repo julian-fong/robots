@@ -31,7 +31,7 @@ learning_rate = 3e-4
 
 eval_interval = 500
 eval_iters = 200
-max_iters = 500
+max_iters = 5000
 
 
 with open(os.getcwd()+'\\data\\input.txt', 'r', encoding='utf8') as f:

@@ -13,19 +13,21 @@ parser.add_argument("-t", "--block_size", help='Length of the time sequence')
 parser.add_argument("-c", "--n_embd", help='dimension of the embedding dimension, also is the number of neuron in layers')
 parser.add_argument("-nh", "--n_heads", help='number of heads for each multi-head attention layer')
 parser.add_argument("-m", "--max_tokens", help='specify how many new tokens you want generated')
+parser.add_argument("-s", "--save", action = "store_true", help='save the model after training')
+parser.add_argument("-l", "--load", help='load the pretrained model off of the filepath')
 
 args = parser.parse_args()
 
 
 #GLOBALS
-batch_size = args.batch_size if args.batch_size else 32 #This is the value of B
-block_size = args.block_size if args.block_size else 64 #This is the value of T
-n_embd = args.n_embd if args.n_embd else 128 #This is the value of C
+batch_size = args.batch_size if args.batch_size else 64 #This is the value of B
+block_size = args.block_size if args.block_size else 256 #This is the value of T
+n_embd = args.n_embd if args.n_embd else 512 #This is the value of C
 n_head = args.n_heads if args.n_heads else 8
-max_new_tokens = args.max_tokens if args.max_tokens else 100
+max_new_tokens = args.max_tokens if args.max_tokens else 1000
 
-dropout = 0.4
-n_layers = 4 #number of decoder blocks we will initialize
+dropout = 0.25
+n_layers = 8 #number of decoder blocks we will initialize
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 learning_rate = 3e-4
 
@@ -271,46 +273,60 @@ class Decoder(nn.Module):
         return idx
 #initializing the stuff
 
-model = Decoder()
-m = model.to(device)
+if not args.load:
+    model = Decoder()
+    m = model.to(device)
 
-print(sum(p.numel() for p in m.parameters())/1e6, 'M parameters')
+    print(sum(p.numel() for p in m.parameters())/1e6, 'M parameters')
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-#use this function to estimate the loss every once in a while
-@torch.no_grad()
-def estimate_loss():
-    out = {}
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+
+    #use this function to estimate the loss every once in a while
+    @torch.no_grad()
+    def estimate_loss():
+        out = {}
+        model.eval()
+        for split in ['train', 'val']:
+            losses = torch.zeros(eval_iters)
+            for k in range(eval_iters):
+                X, Y = get_batch(split)
+                logits, loss = model(X, Y)
+                losses[k] = loss.item()
+            out[split] = losses.mean()
+        model.train()
+        return out
+
+    #training loop
+    print("Beginning training:")
+    for iter in range(max_iters):
+
+        # every once in a while evaluate the loss on train and val sets
+        if iter % eval_interval == 0 or iter == max_iters - 1:
+            losses = estimate_loss()
+            print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+
+        # sample a batch of data
+        xb, yb = get_batch('train')
+
+        # evaluate the loss
+        logits, loss = model(xb, yb)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
+
+    if args.save:
+        print("saving the model")
+        filepath = os.getcwd()+"\\shakespeare_model\\model.pt"
+        torch.save(model.state_dict(), filepath)
+        print("model saved at:", filepath)
+
+else:
+    model = Decoder()
+    model.load_state_dict(torch.load(args.load))
     model.eval()
-    for split in ['train', 'val']:
-        losses = torch.zeros(eval_iters)
-        for k in range(eval_iters):
-            X, Y = get_batch(split)
-            logits, loss = model(X, Y)
-            losses[k] = loss.item()
-        out[split] = losses.mean()
-    model.train()
-    return out
-
-#training loop
-print("Beginning training:")
-for iter in range(max_iters):
-
-    # every once in a while evaluate the loss on train and val sets
-    if iter % eval_interval == 0 or iter == max_iters - 1:
-        losses = estimate_loss()
-        print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
-
-    # sample a batch of data
-    xb, yb = get_batch('train')
-
-    # evaluate the loss
-    logits, loss = model(xb, yb)
-    optimizer.zero_grad(set_to_none=True)
-    loss.backward()
-    optimizer.step()
+    m = model.to(device)
 
 # generate from the model
 context = torch.zeros((1, 1), dtype=torch.long, device=device)
-print(decode(m.generate(context, max_new_tokens=500)[0].tolist()))
+print(decode(m.generate(context, max_new_tokens=max_new_tokens)[0].tolist()))
 #open('more.txt', 'w').write(decode(m.generate(context, max_new_tokens=10000)[0].tolist()))

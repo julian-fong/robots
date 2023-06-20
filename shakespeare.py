@@ -5,6 +5,7 @@ import os
 import matplotlib.pyplot as plt
 import argparse
 
+from time import perf_counter
 
 parser  = argparse.ArgumentParser(description = 'Model specifications')
 
@@ -22,19 +23,24 @@ args = parser.parse_args()
 #GLOBALS
 batch_size = args.batch_size if args.batch_size else 64 #This is the value of B
 block_size = args.block_size if args.block_size else 256 #This is the value of T
-n_embd = args.n_embd if args.n_embd else 512 #This is the value of C
-n_head = args.n_heads if args.n_heads else 8
+n_embd = args.n_embd if args.n_embd else 384 #This is the value of C
+n_head = args.n_heads if args.n_heads else 6
 max_new_tokens = args.max_tokens if args.max_tokens else 1000
 
-dropout = 0.25
-n_layers = 8 #number of decoder blocks we will initialize
+dropout = 0.2
+n_layers = 6 #number of decoder blocks we will initialize
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 learning_rate = 3e-4
+ls = 0.0
 
 eval_interval = 500
 eval_iters = 200
 max_iters = 5000
 
+
+print(device)
+
+torch.manual_seed(1337)
 
 with open(os.getcwd()+'\\data\\input.txt', 'r', encoding='utf8') as f:
     text = f.read()
@@ -60,8 +66,6 @@ n = int(0.9*len(data))
 train_data = data[:n]
 val_data = data[n:]
 
-
-block_size = 8
 train_data[:block_size+1]
 x = train_data[:block_size]
 y = train_data[1:block_size+1]
@@ -102,6 +106,7 @@ class PositionalEncoding(nn.Module):
             x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``
             x: (T, B, C)
             We have to change our shape dimensions in to (T, B, C) and then change it back to (B, T, C) when done
+
         """
         x = x + self.pe[:x.size(0)]
         return self.dropout(x)
@@ -206,8 +211,8 @@ class Decoder(nn.Module):
     def __init__(self):
         super().__init__()
         self.tok_embedding_matrix = nn.Embedding(vocab_size, n_embd)
-        self.pos_embedding = PositionalEncoding(n_embd)
-
+        self.pos_embedding = PositionalEncoding(n_embd, dropout = dropout)
+        self.pos_embedding = nn.Embedding(block_size, n_embd)
         # need '*' before list comprehension otherwise we get TypeError: list is not a Module subclass
         self.blocks = nn.Sequential(*[Block(n_head) for _ in range(n_layers)])
 
@@ -231,7 +236,9 @@ class Decoder(nn.Module):
         #assume our targets y are of size (B)
 
         token_embed = self.tok_embedding_matrix(x) #(B, T, C)
-        pos_embed = self.pos_embedding(token_embed.view(T,B,C)).view(B, T, C) #(B, T, C)
+
+        pos_embed = self.pos_embedding(x)
+        #pos_embed = self.pos_embedding(token_embed.view(T,B,C)).view(B, T, C) #(B, T, C)
 
         input = token_embed + pos_embed #(B, T, C)
         input = self.blocks(input) #(B, T, C)
@@ -242,7 +249,7 @@ class Decoder(nn.Module):
         if y is not None:
             logits = logits.view(B*T, -1) #(B*T, C)
             y = y.view(B*T)
-            loss = F.cross_entropy(logits, y)
+            loss = F.cross_entropy(logits, y, label_smoothing=ls)
         else:
             loss = None
 
@@ -298,6 +305,9 @@ if not args.load:
 
     #training loop
     print("Beginning training:")
+
+    start_time = perf_counter()
+
     for iter in range(max_iters):
 
         # every once in a while evaluate the loss on train and val sets
@@ -313,6 +323,10 @@ if not args.load:
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
+
+    stop_time = perf_counter()
+
+    print("Elapsed time:", start_time, stop_time)
 
     if args.save:
         print("saving the model")

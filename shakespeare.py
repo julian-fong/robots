@@ -23,14 +23,14 @@ args = parser.parse_args()
 #GLOBALS
 batch_size = args.batch_size if args.batch_size else 64 #This is the value of B
 block_size = args.block_size if args.block_size else 256 #This is the value of T
-n_embd = args.n_embd if args.n_embd else 384 #This is the value of C
-n_head = args.n_heads if args.n_heads else 6
+n_embd = args.n_embd if args.n_embd else 512 #This is the value of C
+n_head = args.n_heads if args.n_heads else 8
 max_new_tokens = args.max_tokens if args.max_tokens else 1000
 
 dropout = 0.2
-n_layers = 6 #number of decoder blocks we will initialize
+n_layers = 8 #number of decoder blocks we will initialize
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-learning_rate = 3e-4
+learning_rate = 2e-4
 ls = 0.0
 
 eval_interval = 500
@@ -38,10 +38,11 @@ eval_iters = 200
 max_iters = 5000
 
 
-print(device)
+print(f"device is: {device}")
 
 torch.manual_seed(1337)
 
+#DATA PREPROCESSING
 with open(os.getcwd()+'\\data\\input.txt', 'r', encoding='utf8') as f:
     text = f.read()
 
@@ -71,7 +72,7 @@ x = train_data[:block_size]
 y = train_data[1:block_size+1]
 
 
-#getting the batches
+#BATCH LOADER
 
 def get_batch(split):
     data = train_data if split == 'train' else val_data
@@ -83,6 +84,8 @@ def get_batch(split):
 
 xb, yb = get_batch('train')
 
+
+#MODEL CLASSES
 
 #Pytorch's positional encoding https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 import math
@@ -212,7 +215,6 @@ class Decoder(nn.Module):
         super().__init__()
         self.tok_embedding_matrix = nn.Embedding(vocab_size, n_embd)
         self.pos_embedding = PositionalEncoding(n_embd, dropout = dropout)
-        self.pos_embedding = nn.Embedding(block_size, n_embd)
         # need '*' before list comprehension otherwise we get TypeError: list is not a Module subclass
         self.blocks = nn.Sequential(*[Block(n_head) for _ in range(n_layers)])
 
@@ -237,8 +239,7 @@ class Decoder(nn.Module):
 
         token_embed = self.tok_embedding_matrix(x) #(B, T, C)
 
-        pos_embed = self.pos_embedding(x)
-        #pos_embed = self.pos_embedding(token_embed.view(T,B,C)).view(B, T, C) #(B, T, C)
+        pos_embed = self.pos_embedding(token_embed.view(T,B,C)).view(B, T, C) #(B, T, C)
 
         input = token_embed + pos_embed #(B, T, C)
         input = self.blocks(input) #(B, T, C)

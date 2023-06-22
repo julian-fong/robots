@@ -67,11 +67,6 @@ n = int(0.9*len(data))
 train_data = data[:n]
 val_data = data[n:]
 
-train_data[:block_size+1]
-x = train_data[:block_size]
-y = train_data[1:block_size+1]
-
-
 #BATCH LOADER
 
 def get_batch(split):

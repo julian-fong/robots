@@ -240,10 +240,10 @@ class Decoder(nn.Module):
         input = self.blocks(input) #(B, T, C)
 
         input = self.final_layer_norm(input) #(B, T, C)
-        logits = self.final_linear(input) #(B, T, C)
+        logits = self.final_linear(input) #(B, T, vocab_size)
 
         if y is not None:
-            logits = logits.view(B*T, -1) #(B*T, C)
+            logits = logits.view(B*T, -1) #(B*T, vocab_size)
             y = y.view(B*T)
             loss = F.cross_entropy(logits, y, label_smoothing=ls)
         else:

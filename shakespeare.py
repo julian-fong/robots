@@ -28,7 +28,7 @@ n_head = args.n_heads if args.n_heads else 8
 max_new_tokens = args.max_tokens if args.max_tokens else 1000
 
 dropout = 0.2
-n_layers = 8 #number of decoder blocks we will initialize
+n_layers = 6 #number of decoder blocks we will initialize
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 learning_rate = 2e-4
 ls = 0.0

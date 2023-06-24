@@ -141,7 +141,7 @@ class Head(nn.Module):
         V = self.Wv(x) #(B, T, head_size)
 
         #K.T needs to be of shape (B, C, T), so we swap the -2 and -1 positions
-        scores = Q @ K.transpose(-2, -1) * 1/(self.head_size)**2 #(B, T, T)
+        scores = Q @ K.transpose(-2, -1) * 1/(self.head_size)**(1/2) #(B, T, T)
         masked_scores = scores.masked_fill(self.tril[:T, :T] == 0, float('-inf')) #(B, T, T)
         attention_scores = F.softmax(masked_scores, dim = -1) #applying softmax along the rows (B, T, T)
         attention_scores = self.dropout(attention_scores) #(B, T, T)

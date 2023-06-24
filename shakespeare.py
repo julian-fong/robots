@@ -23,24 +23,24 @@ args = parser.parse_args()
 #GLOBALS
 batch_size = args.batch_size if args.batch_size else 64 #This is the value of B
 block_size = args.block_size if args.block_size else 256 #This is the value of T
-n_embd = args.n_embd if args.n_embd else 512 #This is the value of C
-n_head = args.n_heads if args.n_heads else 8
+n_embd = args.n_embd if args.n_embd else 368 #This is the value of C
+n_head = args.n_heads if args.n_heads else 6
 max_new_tokens = args.max_tokens if args.max_tokens else 1000
 
 dropout = 0.2
 n_layers = 6 #number of decoder blocks we will initialize
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-learning_rate = 2e-4
+learning_rate = 3e-4
 ls = 0.0
 
 eval_interval = 500
 eval_iters = 200
-max_iters = 5000
+max_iters = 7500
 
 
 print(f"device is: {device}")
 
-torch.manual_seed(1337)
+# torch.manual_seed(1337)
 
 #DATA PREPROCESSING
 with open(os.getcwd()+'\\data\\input.txt', 'r', encoding='utf8') as f:

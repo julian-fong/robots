@@ -35,7 +35,7 @@ ls = 0.0
 
 eval_interval = 500
 eval_iters = 200
-max_iters = 500
+max_iters = 5000
 
 
 print(f"device is: {device}")
@@ -83,20 +83,16 @@ xb, yb = get_batch('train')
 #MODEL CLASSES
 
 import math
-class PositionalEncoding(nn.Module):
-
-    def __init__(self, seq_len, n_embd):
-        super().__init__()
+def PositionalEncoding(seq_len, n_embd):
         
-        pos_enc = torch.zeros(seq_len, n_embd)
-        position = torch.arange(0, seq_len, dtype = torch.float32).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, n_embd, 2) * (-math.log(10000.0) / n_embd))
-        pos_enc[:, 0::2] = torch.sin(position * div_term)
-        pos_enc[:, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pos_enc', pos_enc)
+    pos_enc = torch.zeros(seq_len, n_embd)
+    position = torch.arange(0, seq_len, dtype = torch.float32).unsqueeze(1)
+    div_term = torch.exp(torch.arange(0, n_embd, 2) * (-math.log(10000.0) / n_embd))
+    pos_enc[:, 0::2] = torch.sin(position * div_term)
+    pos_enc[:, 1::2] = torch.cos(position * div_term)
 
-    def forward(self):
-        return self.pos_enc
+    return pos_enc.to(device)
+
     
 class Head(nn.Module):
     """
@@ -198,8 +194,10 @@ class Decoder(nn.Module):
     def __init__(self):
         super().__init__()
         self.tok_embedding_matrix = nn.Embedding(vocab_size, n_embd)
-        self.pos_embedding = PositionalEncoding(block_size, n_embd)
-        #self.pos_embedding = nn.Embedding(block_size, n_embd)
+        #self.pos_embedding = PositionalEncoding(block_size, n_embd)
+
+        #self.position_embedding_table = nn.Embedding(block_size, n_embd)
+
         # need '*' before list comprehension otherwise we get TypeError: list is not a Module subclass
         self.blocks = nn.Sequential(*[Block(n_head) for _ in range(n_layers)])
 
@@ -225,7 +223,7 @@ class Decoder(nn.Module):
         token_embed = self.tok_embedding_matrix(x) #(B, T, C)
 
         #pos_embed = self.pos_embedding(token_embed.view(T,B,C)).view(B, T, C) #(B, T, C)
-        pos_embed = self.pos_embedding.pos_enc # (T, C)
+        pos_embed = PositionalEncoding(T, C) # (T, C)
 
         input = token_embed + pos_embed #(B, T, C)
         input = self.blocks(input) #(B, T, C)
@@ -251,7 +249,6 @@ class Decoder(nn.Module):
             # crop idx to the last block_size tokens
             idx_cond = idx[:, -block_size:]
             #get the predictions
-            print(idx_cond.shape)
             logits, loss = self(idx_cond) #<-- output of this is (B, T, C)
             #print(f"new dim of logits: {logits.shape}")
             #focus only on the last time step because the last time step is the prediction on what comes next

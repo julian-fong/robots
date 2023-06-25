@@ -23,7 +23,7 @@ args = parser.parse_args()
 #GLOBALS
 batch_size = args.batch_size if args.batch_size else 64 #This is the value of B
 block_size = args.block_size if args.block_size else 256 #This is the value of T
-n_embd = args.n_embd if args.n_embd else 368 #This is the value of C
+n_embd = args.n_embd if args.n_embd else 384 #This is the value of C
 n_head = args.n_heads if args.n_heads else 6
 max_new_tokens = args.max_tokens if args.max_tokens else 1000
 
@@ -35,7 +35,7 @@ ls = 0.0
 
 eval_interval = 500
 eval_iters = 200
-max_iters = 7500
+max_iters = 500
 
 
 print(f"device is: {device}")
@@ -82,32 +82,21 @@ xb, yb = get_batch('train')
 
 #MODEL CLASSES
 
-#Pytorch's positional encoding https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 import math
-
 class PositionalEncoding(nn.Module):
 
-    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+    def __init__(self, seq_len, n_embd):
         super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
+        
+        pos_enc = torch.zeros(seq_len, n_embd)
+        position = torch.arange(0, seq_len, dtype = torch.float32).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, n_embd, 2) * (-math.log(10000.0) / n_embd))
+        pos_enc[:, 0::2] = torch.sin(position * div_term)
+        pos_enc[:, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pos_enc', pos_enc)
 
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-        pe = torch.zeros(max_len, 1, d_model)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
-
-    def forward(self, x):
-        """
-        Arguments:
-            x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``
-            x: (T, B, C)
-            We have to change our shape dimensions in to (T, B, C) and then change it back to (B, T, C) when done
-
-        """
-        x = x + self.pe[:x.size(0)]
-        return self.dropout(x)
+    def forward(self):
+        return self.pos_enc
     
 class Head(nn.Module):
     """
@@ -209,7 +198,8 @@ class Decoder(nn.Module):
     def __init__(self):
         super().__init__()
         self.tok_embedding_matrix = nn.Embedding(vocab_size, n_embd)
-        self.pos_embedding = PositionalEncoding(n_embd, dropout = dropout)
+        self.pos_embedding = PositionalEncoding(block_size, n_embd)
+        #self.pos_embedding = nn.Embedding(block_size, n_embd)
         # need '*' before list comprehension otherwise we get TypeError: list is not a Module subclass
         self.blocks = nn.Sequential(*[Block(n_head) for _ in range(n_layers)])
 
@@ -234,7 +224,8 @@ class Decoder(nn.Module):
 
         token_embed = self.tok_embedding_matrix(x) #(B, T, C)
 
-        pos_embed = self.pos_embedding(token_embed.view(T,B,C)).view(B, T, C) #(B, T, C)
+        #pos_embed = self.pos_embedding(token_embed.view(T,B,C)).view(B, T, C) #(B, T, C)
+        pos_embed = self.pos_embedding.pos_enc # (T, C)
 
         input = token_embed + pos_embed #(B, T, C)
         input = self.blocks(input) #(B, T, C)
@@ -260,6 +251,7 @@ class Decoder(nn.Module):
             # crop idx to the last block_size tokens
             idx_cond = idx[:, -block_size:]
             #get the predictions
+            print(idx_cond.shape)
             logits, loss = self(idx_cond) #<-- output of this is (B, T, C)
             #print(f"new dim of logits: {logits.shape}")
             #focus only on the last time step because the last time step is the prediction on what comes next
